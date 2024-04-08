@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mindbox-test
+spec:
+  selector:
+    matchLabels:
+      app: my-mindbox-test
+  template:
+    metadata:
+      labels:
+        app: my-mindbox-test
+    spec:
+      affinity:
+        podAntiAffinity: # Размещает поды в разных зонах
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "topology.kubernetes.io/zone"
+          labelSelector:
+            matchLabels:
+              app: my-mindbox-test
+      containers:
+      - name: my-mindbox-test-container
+        image: my-mindbox-test-image:latest
+        resources:
+          requests: # Заданные в условиях выделяемые ресурсы
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m # На первые запросы приложению требуется значительно больше ресурсов CPU
+            memory: 160Mi # Оставляем запас
+        ports:
+        - containerPort: 80
+      readinessProbe: # Непрерывная проверка готовности пода
+        httpGet:
+          path: /health
+          port: 80
+        initialDelaySeconds: 15 # Задержка перед первой проверкой с запасом
+        periodSeconds: 30 # Периодичность проверок
+      livenessProbe: # Перезапускает нездоровые поды
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 30
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-mindbox-test-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-mindbox-test
+  minReplicas: 3 # Минимальное количество, для нахождения в каждой зоне 1 пода(для ночной нагрузки) 
+  maxReplicas: 4 # По результатам тестирования 4х подов хватает для пиковой нагрузки
+  metrics:
+  - type: Resource # Ресурсы заданы ранее
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70 # Cреднее использование CPU подов на уровне 70%, желательно указывать меньше, но думаю это будет баланс с учетом заданных условий
