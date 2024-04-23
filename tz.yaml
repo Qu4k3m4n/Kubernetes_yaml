@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-mindbox-test
+  name: my-test
 spec:
   selector:
     matchLabels:
-      app: my-mindbox-test
+      app: my-test
   template:
     metadata:
       labels:
-        app: my-mindbox-test
+        app: my-test
     spec:
       affinity:
         podAntiAffinity: # Размещает поды в разных зонах
@@ -17,10 +17,10 @@ spec:
           - topologyKey: "topology.kubernetes.io/zone"
           labelSelector:
             matchLabels:
-              app: my-mindbox-test
+              app: my-test
       containers:
-      - name: my-mindbox-test-container
-        image: my-mindbox-test-image:latest
+      - name: my-test-container
+        image: my-test-image:1
         resources:
           requests: # Заданные в условиях выделяемые ресурсы
             cpu: 100m
@@ -35,25 +35,25 @@ spec:
           path: /health
           port: 80
         initialDelaySeconds: 15 # Задержка перед первой проверкой с запасом
-        periodSeconds: 30 # Периодичность проверок
+        periodSeconds: 15 # Периодичность проверок
       livenessProbe: # Перезапускает нездоровые поды
           httpGet:
             path: /health
             port: 80
           initialDelaySeconds: 15
-          periodSeconds: 30
+          periodSeconds: 15
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: my-mindbox-test-hpa
+  name: my-test-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: my-mindbox-test
+    name: my-test
   minReplicas: 3 # Минимальное количество, для нахождения в каждой зоне 1 пода(для ночной нагрузки) 
-  maxReplicas: 4 # По результатам тестирования 4х подов хватает для пиковой нагрузки
+  maxReplicas: 5 # По результатам тестирования 4х подов хватает для пиковой нагрузки, больше на случай отказа зоны
   metrics:
   - type: Resource # Ресурсы заданы ранее
     resource:
@@ -61,3 +61,16 @@ spec:
       target:
         type: Utilization
         averageUtilization: 70 # Cреднее использование CPU подов на уровне 70%, желательно указывать меньше, но думаю это будет баланс с учетом заданных условий
+        apiVersion: v1
+---
+kind: Service
+metadata:
+  name: my-test-service
+spec:
+  selector:
+    app: my-test
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: LoadBalancer
